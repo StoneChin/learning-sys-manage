@@ -34,13 +34,18 @@ class Document(Base):
 
 
 class RAGConfig(Base):
-    """LightRAG 仅使用 Gemini API（单行）。"""
+    """LightRAG：硅基流动（默认）/ Gemini / 本地 Ollama 三选一。"""
     __tablename__ = "rag_config"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     api_key = Column(String(500))  # Gemini API Key
-    api_base = Column(String(500))  # 保留列兼容，未使用
-    llm_model = Column(String(100), default="gemini-2.0-flash")
-    embed_model = Column(String(100), default="gemini-embedding-001")
-    embed_api_key = Column(String(500))  # 保留列兼容，未使用
-    embed_api_base = Column(String(500))  # 保留列兼容，未使用
+    api_base = Column(String(500))
+    llm_model = Column(String(100), default="Qwen/Qwen3-8B")
+    embed_model = Column(String(100), default="Qwen/Qwen3-Embedding-4B")
+    embed_api_key = Column(String(500))
+    embed_api_base = Column(String(500))
+    use_ollama = Column(Integer, default=0)
+    ollama_base_url = Column(String(255))
+    use_siliconflow = Column(Integer, default=1)  # 1=默认
+    siliconflow_api_key = Column(String(500))
+    siliconflow_base_url = Column(String(500))

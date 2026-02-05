@@ -135,39 +135,63 @@ class DocOut(BaseModel):
         from_attributes = True
 
 
+def _is_masked_or_empty_sf(val: Optional[str]) -> bool:
+    v = (val or "").strip()
+    return v == _MASKED_API_KEY or v == ""
+
+
 class RAGConfigOut(BaseModel):
-    """LightRAG 仅使用 Gemini API，三项配置。"""
+    """LightRAG：硅基流动（默认）/ Gemini / 本地 Ollama。"""
     api_key: Optional[str] = None
     llm_model: Optional[str] = None
     embed_model: Optional[str] = None
+    use_ollama: bool = False
+    ollama_base_url: Optional[str] = None
+    use_siliconflow: bool = True
+    siliconflow_api_key: Optional[str] = None
+    siliconflow_base_url: Optional[str] = None
 
 
 class RAGConfigUpdate(BaseModel):
     api_key: Optional[str] = None
     llm_model: Optional[str] = None
     embed_model: Optional[str] = None
+    use_ollama: Optional[bool] = None
+    ollama_base_url: Optional[str] = None
+    use_siliconflow: Optional[bool] = None
+    siliconflow_api_key: Optional[str] = None
+    siliconflow_base_url: Optional[str] = None
 
 
-# --- RAG 配置（Gemini API）---
+# --- RAG 配置（硅基流动 默认 / Gemini / 本地 Ollama）---
 @router.get("/rag-config", response_model=RAGConfigOut)
 async def get_rag_config(
     user=Depends(require_teacher_or_ta),
     db: AsyncSession = Depends(get_db),
 ):
+    import os
     r = await db.execute(select(RAGConfig).limit(1))
     row = r.scalar_one_or_none()
     if not row:
         row = RAGConfig(
-            llm_model="gemini-2.0-flash",
-            embed_model="gemini-embedding-001",
+            llm_model=getattr(settings, "SILICONFLOW_LLM_MODEL", "Qwen/Qwen3-8B"),
+            embed_model=getattr(settings, "SILICONFLOW_EMBED_MODEL", "Qwen/Qwen3-Embedding-4B"),
         )
         db.add(row)
         await db.flush()
-    # 仅用于前端展示：有 Key 时返回占位符，绝不用于后端 API 调用
+    use_ollama = bool(getattr(row, "use_ollama", 0))
+    use_sf = bool(getattr(row, "use_siliconflow", 1))
+    ollama_base = getattr(row, "ollama_base_url", None) or os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+    sf_base = (getattr(row, "siliconflow_base_url", None) or "").strip() or getattr(settings, "SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1")
     return RAGConfigOut(
         api_key=_MASKED_API_KEY if not _is_masked_or_empty(row.api_key) else "",
-        llm_model=row.llm_model or "gemini-2.0-flash",
-        embed_model=row.embed_model or "gemini-embedding-001",
+        llm_model=row.llm_model or ("qwen3:8b" if use_ollama else (getattr(settings, "SILICONFLOW_LLM_MODEL", "Qwen/Qwen3-8B") if use_sf else "gemini-2.0-flash")),
+        embed_model=row.embed_model or ("Qwen/Qwen3-Embedding-4B" if use_ollama else (getattr(settings, "SILICONFLOW_EMBED_MODEL", "Qwen/Qwen3-Embedding-4B") if use_sf else "gemini-embedding-001")),
+        use_ollama=use_ollama,
+        ollama_base_url=ollama_base,
+        use_siliconflow=use_sf,
+        siliconflow_api_key=_MASKED_API_KEY if not _is_masked_or_empty_sf(getattr(row, "siliconflow_api_key", None) or "") else "",
+        siliconflow_base_url=sf_base,
     )
 
 
@@ -177,25 +201,44 @@ async def update_rag_config(
     user=Depends(require_teacher_or_ta),
     db: AsyncSession = Depends(get_db),
 ):
+    import os
     r = await db.execute(select(RAGConfig).limit(1))
     row = r.scalar_one_or_none()
     if not row:
         row = RAGConfig()
         db.add(row)
         await db.flush()
-    # 占位符 *** 绝不写入数据库，仅当用户传入真实 Key 时更新
     if body.api_key is not None and not _is_masked_or_empty(body.api_key):
         row.api_key = body.api_key
     if body.llm_model is not None:
         row.llm_model = body.llm_model
     if body.embed_model is not None:
         row.embed_model = body.embed_model
+    if body.use_ollama is not None:
+        row.use_ollama = 1 if body.use_ollama else 0
+    if body.ollama_base_url is not None:
+        row.ollama_base_url = body.ollama_base_url.strip() or None
+    if body.use_siliconflow is not None:
+        row.use_siliconflow = 1 if body.use_siliconflow else 0
+    if body.siliconflow_api_key is not None and not _is_masked_or_empty_sf(body.siliconflow_api_key):
+        row.siliconflow_api_key = body.siliconflow_api_key.strip() or None
+    if body.siliconflow_base_url is not None:
+        row.siliconflow_base_url = body.siliconflow_base_url.strip() or None
     await db.flush()
     await db.refresh(row)
+    use_ollama = bool(getattr(row, "use_ollama", 0))
+    use_sf = bool(getattr(row, "use_siliconflow", 1))
+    ollama_base = getattr(row, "ollama_base_url", None) or os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+    sf_base = (getattr(row, "siliconflow_base_url", None) or "").strip() or getattr(settings, "SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1")
     return RAGConfigOut(
         api_key=_MASKED_API_KEY if not _is_masked_or_empty(row.api_key) else "",
-        llm_model=row.llm_model or "gemini-2.0-flash",
-        embed_model=row.embed_model or "gemini-embedding-001",
+        llm_model=row.llm_model or ("qwen3:8b" if use_ollama else (getattr(settings, "SILICONFLOW_LLM_MODEL", "Qwen/Qwen3-8B") if use_sf else "gemini-2.0-flash")),
+        embed_model=row.embed_model or ("Qwen/Qwen3-Embedding-4B" if use_ollama else (getattr(settings, "SILICONFLOW_EMBED_MODEL", "Qwen/Qwen3-Embedding-4B") if use_sf else "gemini-embedding-001")),
+        use_ollama=use_ollama,
+        ollama_base_url=ollama_base,
+        use_siliconflow=use_sf,
+        siliconflow_api_key=_MASKED_API_KEY if not _is_masked_or_empty_sf(getattr(row, "siliconflow_api_key", None) or "") else "",
+        siliconflow_base_url=sf_base,
     )
 
 
@@ -395,22 +438,48 @@ async def build_knowledge_graph(
     if not pending:
         return {"message": "没有待构建的文档", "built": 0}
 
-    # Gemini API：.env 优先，DB 中的占位符 *** 视为未配置，绝不传给 Gemini
+    # 仅三种：硅基流动（默认）> 本地 Ollama > Gemini API
     import os
-    env_key = os.getenv("GEMINI_API_KEY", "").strip()
     rcfg = await db.execute(select(RAGConfig).limit(1))
     row = rcfg.scalar_one_or_none()
-    api_key = _effective_api_key(row.api_key if row else None, env_key)
-    if not api_key:
-        raise HTTPException(
-            400,
-            "请先在「LightRAG 配置」中保存有效的 Gemini API Key，或在项目根目录 .env 中配置 GEMINI_API_KEY。",
-        )
-    config = {
-        "api_key": api_key,
-        "llm_model": (row.llm_model or "gemini-2.0-flash") if row else os.getenv("LIGHTRAG_LLM_MODEL", "gemini-2.0-flash"),
-        "embed_model": (row.embed_model or "gemini-embedding-001") if row else os.getenv("LIGHTRAG_EMBED_MODEL", "gemini-embedding-001"),
-    }
+    use_sf = bool(getattr(row, "use_siliconflow", 1) if row else 1)
+    use_ollama = bool(getattr(row, "use_ollama", 0) if row else 0)
+    sf_key = (getattr(row, "siliconflow_api_key", None) or "").strip()
+    if sf_key == _MASKED_API_KEY or not sf_key:
+        sf_key = (getattr(settings, "SILICONFLOW_API_KEY", "") or os.getenv("SILICONFLOW_API_KEY", "")).strip()
+
+    if use_sf and sf_key:
+        base = (getattr(row, "siliconflow_base_url", None) or "").strip() or getattr(settings, "SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1")
+        config = {
+            "use_siliconflow": True,
+            "siliconflow_api_key": sf_key,
+            "siliconflow_base_url": base.rstrip("/"),
+            "llm_model": (row.llm_model or "").strip() or getattr(settings, "SILICONFLOW_LLM_MODEL", "Qwen/Qwen3-8B"),
+            "embed_model": (row.embed_model or "").strip() or getattr(settings, "SILICONFLOW_EMBED_MODEL", "Qwen/Qwen3-Embedding-4B"),
+        }
+    elif use_ollama:
+        ollama_base = (getattr(row, "ollama_base_url", None) or "").strip() or os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+        config = {
+            "use_ollama": True,
+            "ollama_base_url": ollama_base,
+            "llm_model": (row.llm_model or "").strip() or os.getenv("OLLAMA_LLM_MODEL", "qwen3:8b"),
+            "embed_model": (row.embed_model or "").strip() or getattr(settings, "LOCAL_EMBED_MODEL", "Qwen/Qwen3-Embedding-4B"),
+        }
+    else:
+        env_key = os.getenv("GEMINI_API_KEY", "").strip()
+        api_key = _effective_api_key(row.api_key if row else None, env_key)
+        if not api_key:
+            raise HTTPException(
+                400,
+                "请先在「LightRAG 配置」中选择 Gemini 并保存 API Key，或在 .env 中配置 GEMINI_API_KEY。",
+            )
+        config = {
+            "use_ollama": False,
+            "use_siliconflow": False,
+            "api_key": api_key,
+            "llm_model": (row.llm_model or "").strip() or "gemini-2.0-flash",
+            "embed_model": (row.embed_model or "").strip() or "gemini-embedding-001",
+        }
     # 构建前清除该知识库的 RAG 缓存，确保使用本次的 config（含最新 API Key）
     lightrag_service._rag_instances.pop(kb_id, None)
 

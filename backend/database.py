@@ -56,6 +56,11 @@ async def _migrate_rag_columns(conn):
         for col, spec in [
             ("embed_api_key", "VARCHAR(500)"),
             ("embed_api_base", "VARCHAR(500)"),
+            ("use_ollama", "INTEGER DEFAULT 0"),
+            ("ollama_base_url", "VARCHAR(255)"),
+            ("use_siliconflow", "INTEGER DEFAULT 1"),
+            ("siliconflow_api_key", "VARCHAR(500)"),
+            ("siliconflow_base_url", "VARCHAR(500)"),
         ]:
             try:
                 sync_conn.execute(text(f"ALTER TABLE rag_config ADD COLUMN {col} {spec}"))

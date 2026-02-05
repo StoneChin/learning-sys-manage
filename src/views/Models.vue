@@ -58,10 +58,8 @@
         <template v-if="form.model_type === 'api'">
           <el-form-item label="提供商" prop="provider">
             <el-select v-model="form.provider" placeholder="选择" style="width: 100%">
-              <el-option label="OpenAI" value="openai" />
-              <el-option label="DeepSeek" value="deepseek" />
+              <el-option label="硅基流动（默认）" value="siliconflow" />
               <el-option label="Gemini" value="gemini" />
-              <el-option label="其他 (OpenAI 兼容)" value="other" />
             </el-select>
           </el-form-item>
           <el-form-item label="模型名称" prop="model_name">
@@ -70,25 +68,28 @@
               :placeholder="
                 form.provider === 'gemini'
                   ? '例如: gemini-2.0-flash, gemini-2.5-flash'
-                  : '例如: deepseek-chat, gpt-4'
+                  : '例如: Qwen/Qwen3-8B'
               "
             />
           </el-form-item>
           <el-form-item label="API Base">
-            <el-input v-model="form.api_base" placeholder="留空使用默认" />
+            <el-input v-model="form.api_base" :placeholder="form.provider === 'siliconflow' ? '留空使用 https://api.siliconflow.cn/v1' : '留空使用默认'" />
           </el-form-item>
           <el-form-item label="API Key" prop="api_key">
             <el-input
               v-model="form.api_key"
               type="password"
               :placeholder="
-                form.provider === 'gemini' ? '可选，留空使用 .env 中 GEMINI_API_KEY' : 'API Key'
+                form.provider === 'gemini' ? '可选，留空使用 .env 中 GEMINI_API_KEY' : '硅基流动 API Key'
               "
               show-password
             />
           </el-form-item>
         </template>
         <template v-else>
+          <el-form-item label="提供商">
+            <span>Ollama 本机</span>
+          </el-form-item>
           <el-form-item label="本地模型">
             <el-select v-model="form.model_name" placeholder="选择本地模型" filterable style="width: 100%">
               <el-option v-for="m in localList" :key="m" :label="m" :value="m" />
@@ -98,7 +99,7 @@
             <el-input v-model="form.local_path" placeholder="模型完整路径（可选）" />
           </el-form-item>
           <el-form-item label="API Base">
-            <el-input v-model="form.api_base" placeholder="本地服务地址，如 http://127.0.0.1:8000/v1" />
+            <el-input v-model="form.api_base" placeholder="Ollama 地址，如 http://127.0.0.1:11434/v1" />
           </el-form-item>
         </template>
         <el-form-item label="设为默认">
@@ -131,7 +132,7 @@ const formRef = ref()
 const form = reactive({
   name: '',
   model_type: 'api',
-  provider: 'gemini',
+  provider: 'siliconflow',
   model_name: '',
   api_base: '',
   api_key: '',
@@ -153,7 +154,7 @@ const showDialog = (row) => {
   editId.value = row?.id || null
   form.name = row?.name || ''
   form.model_type = row?.model_type || 'api'
-  form.provider = row?.provider || 'gemini'
+  form.provider = row?.provider || 'siliconflow'
   form.model_name = row?.model_name || ''
   form.api_base = row?.api_base || ''
   form.api_key = row?.api_key === '***' ? '' : (row?.api_key || '')
@@ -224,4 +225,11 @@ const onDownload = async () => {
 
 onMounted(load)
 watch(dialogVisible, (v) => v && load())
+watch(
+  () => form.model_type,
+  (t) => {
+    if (t === 'local') form.provider = 'ollama'
+    else if (t === 'api' && form.provider === 'ollama') form.provider = 'siliconflow'
+  }
+)
 </script>

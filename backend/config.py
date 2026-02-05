@@ -29,6 +29,17 @@ class Settings(BaseSettings):
     NEO4J_PASSWORD: str = "password"
     NEO4J_DATABASE: str = "neo4j"
 
+    # 硅基流动 API（默认）
+    SILICONFLOW_API_KEY: str = ""
+    SILICONFLOW_BASE_URL: str = "https://api.siliconflow.cn/v1"
+    SILICONFLOW_LLM_MODEL: str = "Qwen/Qwen3-8B"
+    SILICONFLOW_EMBED_MODEL: str = "Qwen/Qwen3-Embedding-4B"
+
+    # 本地 Ollama
+    OLLAMA_BASE_URL: str = "http://127.0.0.1:11434"
+    OLLAMA_LLM_MODEL: str = "qwen3:8b"
+    LOCAL_EMBED_MODEL: str = "Qwen/Qwen3-Embedding-4B"
+
     # CORS
     CORS_ORIGINS: list = ["http://localhost:5173", "http://127.0.0.1:5173"]
 

@@ -1,21 +1,55 @@
 <template>
   <div class="knowledge-page">
-    <!-- LightRAG 配置：仅 Gemini API -->
+    <!-- LightRAG 配置：硅基流动（默认）/ 本地 Ollama / Gemini API -->
     <el-card class="rag-config-card">
       <template #header>
         <span>LightRAG 配置</span>
-        <span class="config-hint">（使用 Gemini API，见 Google AI Studio 获取 Key）</span>
+        <span class="config-hint">三选一：硅基流动 API（默认）、本地 Ollama、Gemini API</span>
       </template>
-      <el-form :model="ragConfig" label-width="120" style="max-width: 480px">
-        <el-form-item label="Gemini API Key">
-          <el-input v-model="ragConfig.api_key" type="password" placeholder="Gemini API Key" show-password clearable />
+      <el-form :model="ragConfig" label-width="140" style="max-width: 520px">
+        <el-form-item label="使用方式">
+          <el-radio-group v-model="ragMode">
+            <el-radio value="siliconflow">硅基流动 API（默认）</el-radio>
+            <el-radio value="ollama">本地 Ollama</el-radio>
+            <el-radio value="gemini">Gemini API</el-radio>
+          </el-radio-group>
         </el-form-item>
-        <el-form-item label="LLM 模型">
-          <el-input v-model="ragConfig.llm_model" placeholder="如 gemini-2.0-flash" />
-        </el-form-item>
-        <el-form-item label="Embedding 模型">
-          <el-input v-model="ragConfig.embed_model" placeholder="如 gemini-embedding-001" />
-        </el-form-item>
+        <template v-if="ragMode === 'siliconflow'">
+          <el-form-item label="硅基流动 API Key">
+            <el-input v-model="ragConfig.siliconflow_api_key" type="password" placeholder="硅基流动 API Key" show-password clearable />
+          </el-form-item>
+          <el-form-item label="API Base URL">
+            <el-input v-model="ragConfig.siliconflow_base_url" placeholder="留空使用 https://api.siliconflow.cn/v1" clearable />
+          </el-form-item>
+          <el-form-item label="LLM 模型">
+            <el-input v-model="ragConfig.llm_model" placeholder="如 Qwen/Qwen3-8B" />
+          </el-form-item>
+          <el-form-item label="Embedding 模型">
+            <el-input v-model="ragConfig.embed_model" placeholder="如 Qwen/Qwen3-Embedding-4B" />
+          </el-form-item>
+        </template>
+        <template v-else-if="ragMode === 'ollama'">
+          <el-form-item label="Ollama 地址">
+            <el-input v-model="ragConfig.ollama_base_url" placeholder="如 http://127.0.0.1:11434" clearable />
+          </el-form-item>
+          <el-form-item label="LLM 模型">
+            <el-input v-model="ragConfig.llm_model" placeholder="如 qwen3:8b" />
+          </el-form-item>
+          <el-form-item label="Embedding 模型">
+            <el-input v-model="ragConfig.embed_model" placeholder="本地 embedding 模型名" />
+          </el-form-item>
+        </template>
+        <template v-else>
+          <el-form-item label="Gemini API Key">
+            <el-input v-model="ragConfig.api_key" type="password" placeholder="Gemini API Key（可选，可填 .env）" show-password clearable />
+          </el-form-item>
+          <el-form-item label="LLM 模型">
+            <el-input v-model="ragConfig.llm_model" placeholder="如 gemini-2.0-flash" />
+          </el-form-item>
+          <el-form-item label="Embedding 模型">
+            <el-input v-model="ragConfig.embed_model" placeholder="如 gemini-embedding-001" />
+          </el-form-item>
+        </template>
         <el-form-item>
           <el-button type="primary" @click="saveRagConfig">保存配置</el-button>
         </el-form-item>
@@ -201,10 +235,16 @@ const currentKb = ref(null)
 const docList = ref([])
 const pollTimer = ref(null)
 const building = ref(false)
+const ragMode = ref('siliconflow') // siliconflow | ollama | gemini，默认硅基流动
 const ragConfig = reactive({
   api_key: '',
   llm_model: 'gemini-2.0-flash',
   embed_model: 'gemini-embedding-001',
+  use_ollama: false,
+  ollama_base_url: 'http://127.0.0.1:11434',
+  use_siliconflow: true,
+  siliconflow_api_key: '',
+  siliconflow_base_url: '',
 })
 
 const graphDialogVisible = ref(false)
@@ -324,15 +364,28 @@ const loadRagConfig = async () => {
     ragConfig.api_key = c.api_key || ''
     ragConfig.llm_model = c.llm_model || 'gemini-2.0-flash'
     ragConfig.embed_model = c.embed_model || 'gemini-embedding-001'
+    ragConfig.ollama_base_url = c.ollama_base_url || 'http://127.0.0.1:11434'
+    ragConfig.siliconflow_api_key = c.siliconflow_api_key || ''
+    ragConfig.siliconflow_base_url = c.siliconflow_base_url || ''
+    if (c.use_ollama) ragMode.value = 'ollama'
+    else if (c.use_siliconflow) ragMode.value = 'siliconflow'
+    else ragMode.value = 'gemini'
   } catch (_) {}
 }
 
 const saveRagConfig = async () => {
   try {
+    const useSiliconflow = ragMode.value === 'siliconflow'
+    const useOllama = ragMode.value === 'ollama'
     await knowledgeApi.updateRagConfig({
-      api_key: ragConfig.api_key,
+      use_siliconflow: useSiliconflow,
+      use_ollama: useOllama,
+      api_key: ragMode.value === 'gemini' ? ragConfig.api_key : undefined,
       llm_model: ragConfig.llm_model,
       embed_model: ragConfig.embed_model,
+      ollama_base_url: useOllama ? ragConfig.ollama_base_url : undefined,
+      siliconflow_api_key: useSiliconflow ? ragConfig.siliconflow_api_key : undefined,
+      siliconflow_base_url: useSiliconflow ? ragConfig.siliconflow_base_url : undefined,
     })
     ElMessage.success('已保存')
     loadRagConfig()

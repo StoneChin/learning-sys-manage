@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from database import get_db, AsyncSessionLocal
-from auth import require_teacher_or_ta
+from auth import require_user
 from services.chat_service import chat, chat_stream
 
 router = APIRouter(prefix="/chat", tags=["对话"])
@@ -50,7 +50,7 @@ async def _sse_generator(req):
 @router.post("/completions")
 async def chat_completions(
     req: ChatRequest,
-    user=Depends(require_teacher_or_ta),
+    user=Depends(require_user),
     db=Depends(get_db),
 ):
     msgs = [{"role": m.role, "content": m.content} for m in req.messages]
@@ -89,7 +89,7 @@ async def search_knowledge(
     kb_id: int,
     query: str,
     top_k: int = 5,
-    user=Depends(require_teacher_or_ta),
+    user=Depends(require_user),
 ):
     from services import lightrag_service
     refs = await lightrag_service.search_rag(kb_id, query, top_k=top_k)
